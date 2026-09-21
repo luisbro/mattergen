@@ -1,4 +1,4 @@
-"""Utilities for selecting charge-neutral structures."""
+"""Charge-neutrality checks for generated structures."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 from pymatgen.core import Structure
-from pymatgen.io.cif import CifParser
 
 
 OXIDATION_STATES_DICT = {
@@ -79,24 +78,13 @@ OXIDATION_STATES_DICT = {
 }
 
 
-def structure_from_cif_string(cif_string: str) -> Structure:
-    return CifParser.from_str(cif_string).parse_structures(primitive=True)[0]
-
-
-def _coerce_structure(structure_or_cif: Structure | str) -> Structure:
-    if isinstance(structure_or_cif, Structure):
-        return structure_or_cif
-    return structure_from_cif_string(structure_or_cif)
-
-
 def is_charge_neutral(
-    structure_or_cif: Structure | str,
+    structure: Structure,
     oxidation_states_dict: dict[str, list[int]] = OXIDATION_STATES_DICT,
 ) -> bool:
     """Return True if any oxidation-state assignment makes the structure neutral."""
 
-    struct = _coerce_structure(structure_or_cif)
-    composition = struct.composition
+    composition = structure.composition
 
     if composition.is_element:
         return True
@@ -122,45 +110,8 @@ def is_charge_neutral(
     return False
 
 
-def add_charge_neutral_column(
-    df: pd.DataFrame,
-    structure_column: str = "structures",
-    output_column: str = "is_charge_neutral",
-) -> pd.DataFrame:
-    result = df.copy()
-    result[output_column] = result[structure_column].apply(is_charge_neutral)
-    return result
+def create_charge_neutrality_for_dir(structures: list[Structure], base_dir: Path) -> None:
+    is_charge_neutral_list = [is_charge_neutral(s) for s in structures]
 
-
-def select_charge_neutral_structures(
-    df: pd.DataFrame,
-    structure_column: str = "structures",
-) -> pd.DataFrame:
-    df_with_flag = add_charge_neutral_column(df, structure_column=structure_column)
-    return df_with_flag[df_with_flag["is_charge_neutral"]].copy()
-
-
-def main() -> None:
-    csv_path = Path("prerelaxed_structures.csv")
-    df_all = pd.read_csv(csv_path, index_col=0)
-
-    df_all = add_charge_neutral_column(df_all)
-
-    print(f"Total structures: {len(df_all)}")
-    print(f"Charge-neutral structures: {df_all['is_charge_neutral'].sum()}")
-
-    df_neutral = df_all[df_all["is_charge_neutral"]].copy()
-    df_neutral["structures"] = df_neutral["structures"].apply(
-        structure_from_cif_string
-    )
-    df_neutral["structures"] = df_neutral["structures"].apply(
-        lambda structure: structure.to(fmt="cif")
-    )
-
-    output_path = Path("charge_neutral_structures.csv")
-    df_neutral.to_csv(output_path)
-    print(f"Saved charge-neutral rows to: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
+    df = pd.DataFrame({"is_charge_neutral": is_charge_neutral_list})
+    df.to_csv(base_dir / "is_charge_neutral.csv", index=False)

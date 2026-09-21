@@ -21,6 +21,7 @@ def aggregate(generated_structures_dir: Path, predictions_path: Path | None) -> 
     metrics_path = generated_structures_dir / "metrics.csv"
     matched_labels_path = generated_structures_dir / "labeled_data_matches.csv"
     space_group_info_path = generated_structures_dir / "space_group_info.csv"
+    charge_neutrality_path = generated_structures_dir / "is_charge_neutral.csv"
 
     structures = read(structures_path, index=":")
     structures = [AseAtomsAdaptor.get_structure(s) for s in structures]
@@ -35,19 +36,26 @@ def aggregate(generated_structures_dir: Path, predictions_path: Path | None) -> 
 
         create_space_group_info(structures, generated_structures_dir)
 
-    for path in [metrics_path, matched_labels_path, space_group_info_path]:
+    if not (charge_neutrality_path).exists():
+        from charge_neutrality import create_charge_neutrality_for_dir
+
+        create_charge_neutrality_for_dir(structures, generated_structures_dir)
+
+    for path in [metrics_path, matched_labels_path, space_group_info_path, charge_neutrality_path]:
         if not path.exists():
             raise FileNotFoundError(f"Required file {path} not found.")
 
     metrics = pd.read_csv(metrics_path)
     matched_labels = pd.read_csv(matched_labels_path)
     space_group_info = pd.read_csv(space_group_info_path)
+    charge_neutrality = pd.read_csv(charge_neutrality_path)
 
     all_data = pd.concat(
         [
             metrics,
             matched_labels,
             space_group_info,
+            charge_neutrality,
         ],
         axis=1,
     )
